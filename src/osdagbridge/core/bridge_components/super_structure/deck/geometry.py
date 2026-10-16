@@ -1,1 +1,0 @@
-"""Deck geometry stub."""
