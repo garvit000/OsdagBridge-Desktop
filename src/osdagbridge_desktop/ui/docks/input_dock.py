@@ -1112,6 +1112,9 @@ class InputDock(QWidget):
             self.parent.input_dict[KEY_PROJECT_LOCATION] = loc
         self._update_project_location_display(loc)
 
+        if KEY_DESIGN_MODE in data and data[KEY_DESIGN_MODE]:
+            self._current_design_mode = str(data[KEY_DESIGN_MODE]).strip()
+
         # Mark required fields as changed so solve_extend_basic_input_dict
         # runs on the next Design call and derives all computed defaults.
         self.is_require_field_changed = True
