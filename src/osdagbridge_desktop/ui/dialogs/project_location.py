@@ -48,6 +48,12 @@ def set_project_location_session(loc: dict | None) -> None:
     if method == "custom_data":
         LAST_LOCATION_DATA = None
         custom = loc.get("custom_weather_data")
+        if not custom and isinstance(weather, dict):
+            custom = {
+                k: weather[k]
+                for k in ("wind_speed", "zone", "max_temp", "min_temp")
+                if k in weather
+            }
         LAST_CUSTOM_DATA = custom
     else:
         LAST_LOCATION_DATA = data

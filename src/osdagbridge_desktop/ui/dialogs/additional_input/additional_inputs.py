@@ -577,6 +577,9 @@ class AdditionalInputs(QDialog):
         # _save_stiffener_member_data otherwise only runs when switching *away* from a
         # member (via _on_stiffener_member_load), so the last-viewed girder (e.g. G4)
         # would never be persisted. This gives it the same save the other girders get.
+        self._save_member_fields()
+        self._save_cb_pair()
+        self._save_ed_pair()
         combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
         if combo and combo.currentText().strip():
             self._save_stiffener_member_data(combo.currentText().strip())
@@ -2190,6 +2193,11 @@ class AdditionalInputs(QDialog):
                 w.blockSignals(True)
                 w.setText(str(stored))
                 w.blockSignals(False)
+
+        inter_val = self.working_input_dict.get(f"{KEY_MP_STIFFENER_INTERMEDIATE}{suffix}", "Yes")
+        self._on_intermediate_stiffener_changed(inter_val, restore_default=False)
+        long_val = self.working_input_dict.get(f"{KEY_MP_STIFFENER_LONGITUDINAL}{suffix}", "No")
+        self._on_longitudinal_stiffener_changed(long_val)
 
     def _update_stiffener_cad(self) -> None:  # compute: pushes current working_input_dict and active member ID to the Stiffener Details CAD widget
         from osdagbridge_desktop.ui.dialogs.additional_input.drawings.stiffener_details_cad import StiffenerDetailsCad
