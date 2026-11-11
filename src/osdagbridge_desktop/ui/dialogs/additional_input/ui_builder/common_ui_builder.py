@@ -751,11 +751,13 @@ class UIBuilder(QWidget):
             if validator_def:
                 vtype = validator_def.get("type")
                 if vtype == "double_range":
-                    field.setValidator(QDoubleValidator(
+                    val = QDoubleValidator(
                         validator_def.get("bottom", 0.0),
                         validator_def.get("top", 1e9),
                         validator_def.get("decimals", 2),
-                    ))
+                    )
+                    val.setNotation(QDoubleValidator.StandardNotation)
+                    field.setValidator(val)
                 elif vtype == "int_range":
                     field.setValidator(QIntValidator(
                         validator_def.get("bottom", 0),

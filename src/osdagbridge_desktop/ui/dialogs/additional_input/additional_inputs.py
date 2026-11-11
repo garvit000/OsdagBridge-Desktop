@@ -614,10 +614,25 @@ class AdditionalInputs(QDialog):
                 text=message,
                 dialogType=MessageBoxType.Warning
             ).exec()
+            corrected_str = f"{float(corrected):.2f}" if isinstance(corrected, float) else str(corrected)
             widget.blockSignals(True)
-            widget.setText(str(corrected))
+            widget.setText(corrected_str)
             widget.blockSignals(False)
-            self._update_input_dict(key, str(corrected))
+            self._update_input_dict(key, corrected_str)
+        else:
+            validator = widget.validator()
+            if isinstance(validator, QDoubleValidator) and "thermal_coeff" not in key:
+                try:
+                    f_val = float(current_text)
+                    if "." in current_text:
+                        formatted = f"{f_val:.2f}"
+                        if formatted != current_text:
+                            widget.blockSignals(True)
+                            widget.setText(formatted)
+                            widget.blockSignals(False)
+                            self._update_input_dict(key, formatted)
+                except ValueError:
+                    pass
 
         self._update_additional_input_cad()
 
@@ -2156,7 +2171,17 @@ class AdditionalInputs(QDialog):
                 w.blockSignals(False)
             elif isinstance(w, QLineEdit):
                 w.blockSignals(True)
-                w.setText(str(stored))
+                if stored is not None and str(stored).strip() not in ("", "NA"):
+                    try:
+                        f_val = float(stored)
+                        if str(stored).strip().lstrip('-').isdigit():
+                            w.setText(str(stored).strip())
+                        else:
+                            w.setText(f"{f_val:.2f}")
+                    except ValueError:
+                        w.setText(str(stored))
+                else:
+                    w.setText(str(stored) if stored is not None else "")
                 w.blockSignals(False)
 
     def _update_stiffener_cad(self) -> None:  # compute: pushes current working_input_dict and active member ID to the Stiffener Details CAD widget
@@ -3217,9 +3242,8 @@ class AdditionalInputs(QDialog):
                 continue
             validator = line_edit.validator()
             if isinstance(validator, QDoubleValidator):
-                if validator.notation() != QDoubleValidator.ScientificNotation:
-                    validator.setDecimals(places)
-                    validator.setNotation(QDoubleValidator.StandardNotation)
+                validator.setDecimals(places)
+                validator.setNotation(QDoubleValidator.StandardNotation)
 
     def _normalize_numeric_texts(self, places=2):  # utility: reformats existing numeric QLineEdit text to the given decimal places
         fmt = f"{{:.{places}f}}"
