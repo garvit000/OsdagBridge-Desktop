@@ -563,6 +563,30 @@ class AdditionalInputs(QDialog):
     # ── Dialog Persistence ───────────────────────────────────────────────────────
 
     def _save_inputs(self):  # on_change: validates all tabs then commits working_input_dict and emits CAD update signal
+        # Unselected tab pages are hidden, but their inputs still need checking.
+        tab_pages = {
+            tab.widget(i)
+            for tab in self.findChildren(QTabWidget)
+            for i in range(tab.count())
+            if tab.isTabEnabled(i) and tab.isTabVisible(i)
+        }
+        for field in self.findChildren(QLineEdit):
+            key = field.objectName()
+            if not key or not field.isEnabled() or field.isReadOnly() or field.text().strip():
+                continue
+            node = field
+            while node is not self:
+                if node.isHidden() and node not in tab_pages:
+                    break
+                node = node.parentWidget()
+            else:
+                # Validate the actual blank, not the old-value fallback.
+                inputs = dict(self.working_input_dict)
+                inputs[key] = ""
+                result = self.validator.validate_additional_inputs(key, inputs)
+                if result is not None:
+                    self._show_validation_errors([result[1]])
+                    return
 
         # Validate custom camber if mode is Custom
         if self.working_input_dict.get(KEY_DO_CAMBER_MODE) == "Custom":
