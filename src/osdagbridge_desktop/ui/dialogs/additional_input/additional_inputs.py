@@ -562,7 +562,22 @@ class AdditionalInputs(QDialog):
 
     # ── Dialog Persistence ───────────────────────────────────────────────────────
 
-    def _save_inputs(self):  # on_change: validates all tabs then commits working_input_dict and emits CAD update signal
+    def reject(self):
+        if self._empty_required_input_error():
+            choice = CustomMessageBox(
+                title="Unsaved Inputs",
+                text="Blank fields and unsaved changes will be reset to the last saved values.\n"
+                     "Close without saving?",
+                buttons=["Cancel", "Discard and Close"],
+                dialogType=MessageBoxType.Warning,
+            ).exec()
+            if choice != "Discard and Close":
+                return
+            self.working_input_dict = deepcopy(self.default_input_dict)
+        super().reject()
+
+    def _empty_required_input_error(self):
+        """Return the first applicable blank-field error for Save or Close."""
         # Unselected tab pages are hidden, but their inputs still need checking.
         tab_pages = {
             tab.widget(i)
@@ -585,8 +600,14 @@ class AdditionalInputs(QDialog):
                 inputs[key] = ""
                 result = self.validator.validate_additional_inputs(key, inputs)
                 if result is not None:
-                    self._show_validation_errors([result[1]])
-                    return
+                    return result[1]
+        return None
+
+    def _save_inputs(self):  # on_change: validates all tabs then commits working_input_dict and emits CAD update signal
+        error = self._empty_required_input_error()
+        if error:
+            self._show_validation_errors([error])
+            return
 
         # Validate custom camber if mode is Custom
         if self.working_input_dict.get(KEY_DO_CAMBER_MODE) == "Custom":
