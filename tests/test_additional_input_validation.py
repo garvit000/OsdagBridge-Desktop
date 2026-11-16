@@ -6,6 +6,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QTabWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from osdagbridge_desktop.ui.dialogs.additional_input import additional_inputs as module
 
 
@@ -59,7 +61,7 @@ def test_empty_required_railing_dimension_blocks_save(app, key, tab_index, saved
         message.assert_not_called()
         assert dialog.default_input_dict == saved
     finally:
-        dialog.close()
+        QDialog.reject(dialog)
 
 
 def test_valid_inputs_save_successfully(app):
@@ -78,4 +80,57 @@ def test_valid_inputs_save_successfully(app):
         assert dialog.default_input_dict is saved
         assert saved == {key: 1.5}
     finally:
-        dialog.close()
+        QDialog.reject(dialog)
+
+
+@pytest.mark.parametrize("exit_method", ["close", "escape"])
+def test_close_warns_and_can_cancel_or_discard(app, exit_method):
+    key = module.KEY_CB_WIDTH
+    dialog = ValidationDialog(key, "", 1, 1.5)
+    dialog.show()
+    app.processEvents()
+
+    def close_dialog():
+        if exit_method == "close":
+            dialog.close()
+        else:
+            QTest.keyClick(dialog, Qt.Key_Escape)
+
+    try:
+        with patch.object(module, "CustomMessageBox") as message:
+            message.return_value.exec.return_value = "Cancel"
+            close_dialog()
+            message.assert_called_once()
+            assert "last saved values" in message.call_args.kwargs["text"]
+            assert dialog.isVisible()
+            assert dialog.field.text() == ""
+            assert dialog.working_input_dict[key] == 1.5
+
+            message.reset_mock()
+            message.return_value.exec.return_value = "Discard and Close"
+            close_dialog()
+            message.assert_called_once()
+            assert not dialog.isVisible()
+        assert dialog.default_input_dict == {key: 1.5}
+        assert dialog.working_input_dict == {key: 1.5}
+        # The normal reopen path populates fields from the saved dictionary.
+        dialog.set_defaults()
+        assert float(dialog.field.text()) == 1.5
+    finally:
+        QDialog.reject(dialog)
+
+
+@pytest.mark.parametrize("value", [1.5, 2])
+@pytest.mark.parametrize("exit_method", ["close", "escape"])
+def test_nonblank_inputs_close_without_warning(app, value, exit_method):
+    dialog = ValidationDialog(module.KEY_CB_WIDTH, str(value), 1, 1.5)
+    dialog.working_input_dict[module.KEY_CB_WIDTH] = value
+    dialog.show()
+    app.processEvents()
+    with patch.object(module, "CustomMessageBox") as message:
+        if exit_method == "close":
+            dialog.close()
+        else:
+            QTest.keyClick(dialog, Qt.Key_Escape)
+    message.assert_not_called()
+    assert not dialog.isVisible()
