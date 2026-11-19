@@ -114,6 +114,19 @@ jobs:
           echo "Built installer: $SRC"
           cp "$SRC" "dist/${{ matrix.final }}"
 
+      # Install for real (Linux only; runs in parallel with the Windows build so
+      # it adds no wall-clock time) and check the offline wheel install worked.
+      - name: Smoke-test installer
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          PREFIX_DIR="$RUNNER_TEMP/osdagbridge-test"
+          START=$(date +%s)
+          bash "dist/${{ matrix.final }}" -b -p "$PREFIX_DIR"
+          echo "Install took $(( $(date +%s) - START ))s"
+          test ! -d "$PREFIX_DIR/osdagbridge_wheels" || { echo "wheel dir not cleaned up" >&2; exit 1; }
+          MPLBACKEND=Agg "$PREFIX_DIR/bin/python" -c "import openseespy.opensees, opsvis, osdagbridge_core, osdagbridge_desktop; print('imports OK')"
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
