@@ -9,7 +9,11 @@ source:
   path: ..
 
 build:
-  number: 0
+  # Pure Python: one package serves Windows and Linux, so CI builds it once.
+  noarch: python
+  # Bumped from 0 so the noarch build outranks the old win-64/linux-64 builds of
+  # the same version already on the channel.
+  number: 1
   script: {{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv
   entry_points:
     - osdagbridge=osdagbridge_desktop.__main__:main
