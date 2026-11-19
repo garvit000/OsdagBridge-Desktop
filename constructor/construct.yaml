@@ -34,6 +34,10 @@ extra_files:
   - post_install.sh         # [linux]
   - Uninstall-OsdagBridge.sh  # [linux]
 
+# Re-compress any .tar.bz2 packages as .conda (zstd). Decompression of .conda is
+# several times faster, which directly shortens the "extracting packages" phase.
+transmute_file_type: .conda
+
 initialize_conda: false
 register_python: false
 
