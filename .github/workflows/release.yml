@@ -30,7 +30,7 @@ jobs:
       - name: Install build tools
         shell: bash -l {0}
         run: |
-          conda install -y conda-build anaconda-client
+          conda install -y conda-build
           conda config --set solver libmamba
 
       - name: Build Desktop Conda package
@@ -38,25 +38,38 @@ jobs:
         run: |
           conda-build conda-recipe -c gsrathore -c osdag -c geompy -c conda-forge --output-folder conda-out
 
-      - name: Upload Conda package to Anaconda
-        shell: bash -l {0}
+      # Handed straight to the installer jobs, so the installers always contain
+      # exactly this build, independent of the Anaconda upload below.
+      - name: Save built package
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-conda-package
+          path: conda-out/noarch/osdagbridge-desktop-*.conda
+          if-no-files-found: error
+
+  # Publishes the package so `conda install osdagbridge-desktop` users get it.
+  # The installers do not depend on it, so it runs in parallel with them.
+  upload-package:
+    name: Upload Desktop package to Anaconda
+    needs: build-package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-conda-package
+          path: conda-out
+
+      - name: Upload to Anaconda
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
-          PACKAGE=$(find conda-out -name "osdagbridge-desktop-*.conda" -o -name "osdagbridge-desktop-*.tar.bz2" | head -n 1)
-          if [ -z "$PACKAGE" ]; then
-            echo "No package found in conda-out" >&2
-            exit 1
-          fi
           if [ -z "$ANACONDA_API_TOKEN" ]; then
-            echo "ANACONDA_TOKEN not set; installers will use the package already on the channel."
+            echo "ANACONDA_TOKEN not set; skipping upload."
             exit 0
           fi
-          echo "Uploading $PACKAGE to Anaconda..."
-          # The installers below resolve osdagbridge-desktop from the channel,
-          # so a failed upload must fail the release instead of silently
-          # shipping the previous build.
-          anaconda upload "$PACKAGE" --force
+          pip install --quiet anaconda-client
+          anaconda upload conda-out/*.conda --force
 
   build-installer:
     name: Build ${{ matrix.name }} installer
@@ -91,8 +104,32 @@ jobs:
       - name: Install constructor
         shell: bash -l {0}
         run: |
-          conda install -y constructor
+          conda install -y constructor conda-index
           conda config --set solver libmamba
+
+      # Turn the package built above into a local channel and put it first in
+      # construct.yaml (on the runner only), so constructor bundles this exact
+      # build instead of whatever osdagbridge-desktop is on Anaconda.
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-conda-package
+          path: local-channel/noarch
+
+      - name: Use built package as local channel
+        shell: bash -l {0}
+        run: |
+          mkdir -p local-channel/${{ matrix.platform == 'win' && 'win-64' || 'linux-64' }}
+          python -m conda_index local-channel
+          python - <<'EOF'
+          from pathlib import Path
+          uri = Path("local-channel").resolve().as_uri()
+          p = Path("constructor/construct.yaml")
+          text = p.read_text(encoding="utf-8")
+          p.write_text(text.replace("channels:\n", f"channels:\n  - {uri}\n", 1), encoding="utf-8")
+          print("Added local channel", uri)
+          EOF
+          grep -A6 "^channels:" constructor/construct.yaml
 
       # openseespy / opsvis only exist on PyPI. Their wheels are bundled into
       # the installer and installed offline by post_install, so installing
@@ -125,6 +162,8 @@ jobs:
           bash "dist/${{ matrix.final }}" -b -p "$PREFIX_DIR"
           echo "Install took $(( $(date +%s) - START ))s"
           test ! -d "$PREFIX_DIR/osdagbridge_wheels" || { echo "wheel dir not cleaned up" >&2; exit 1; }
+          grep -q "local-channel" "$PREFIX_DIR"/conda-meta/osdagbridge-desktop-*.json \
+            || { echo "osdagbridge-desktop was not taken from this run's build" >&2; exit 1; }
           MPLBACKEND=Agg "$PREFIX_DIR/bin/python" -c "import openseespy.opensees, opsvis, osdagbridge_core, osdagbridge_desktop; print('imports OK')"
 
       - name: Upload installer artifact
