@@ -94,6 +94,14 @@ jobs:
           conda install -y constructor
           conda config --set solver libmamba
 
+      # openseespy / opsvis only exist on PyPI. Their wheels are bundled into
+      # the installer and installed offline by post_install, so installing
+      # needs no internet and no slow PyPI round-trips.
+      - name: Download bundled pip wheels
+        shell: bash -l {0}
+        run: |
+          python constructor/fetch_wheels.py --platform ${{ matrix.platform }}
+
       - name: Build installer with constructor
         shell: bash -l {0}
         run: |

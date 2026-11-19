@@ -19,7 +19,9 @@ channels:
   - https://conda.anaconda.org/conda-forge
 
 specs:
-  - python >=3.11,<3.13
+  # Pinned so the bundled pip wheels (see extra_files) match the interpreter.
+  # Keep in sync with PYTHON_VERSION in fetch_wheels.py.
+  - python 3.12.*
   - osdagbridge-core >=1.0.0
   - osdagbridge-desktop >=1.0.0
 
@@ -33,6 +35,21 @@ extra_files:
   - remove_shortcuts.ps1    # [win]
   - post_install.sh         # [linux]
   - Uninstall-OsdagBridge.sh  # [linux]
+  # Pip-only runtime dependencies (not available as conda packages), bundled so
+  # installation needs no internet. Downloaded in CI by fetch_wheels.py, which
+  # reads the exact versions from these filenames; installed by post_install.
+  - wheels/openseespy-3.8.0.0-py3-none-any.whl: osdagbridge_wheels/openseespy-3.8.0.0-py3-none-any.whl                      # [win]
+  - wheels/openseespywin-3.8.0.0-py3-none-win_amd64.whl: osdagbridge_wheels/openseespywin-3.8.0.0-py3-none-win_amd64.whl    # [win]
+  - wheels/opsvis-1.3.8-py3-none-any.whl: osdagbridge_wheels/opsvis-1.3.8-py3-none-any.whl                                  # [win]
+  - wheels/openseespy-3.8.0.0-py3-none-any.whl: osdagbridge_wheels/openseespy-3.8.0.0-py3-none-any.whl                      # [linux]
+  - wheels/openseespylinux-3.8.0.0-py3-none-any.whl: osdagbridge_wheels/openseespylinux-3.8.0.0-py3-none-any.whl            # [linux]
+  - wheels/opsvis-1.3.8-py3-none-any.whl: osdagbridge_wheels/opsvis-1.3.8-py3-none-any.whl                                  # [linux]
+
+# Exported while packages are linked and during post_install. Tells the
+# osdagbridge-core post-link script to skip its online pip install; the wheels
+# above are installed offline by post_install instead.
+script_env_variables:
+  OSDAGBRIDGE_OFFLINE_INSTALL: "1"
 
 # Re-compress any .tar.bz2 packages as .conda (zstd). Decompression of .conda is
 # several times faster, which directly shortens the "extracting packages" phase.

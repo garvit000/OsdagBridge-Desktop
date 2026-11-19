@@ -11,6 +11,19 @@ ICON_FILE="$INSTALL_DIR/icon.ico"
 LAUNCHER="$INSTALL_DIR/bin/osdagbridge"
 UNINSTALLER="$INSTALL_DIR/Uninstall-$APP_NAME.sh"
 
+# ---- Pip-only dependencies from the wheels bundled in the installer (offline) ----
+WHEEL_DIR="$INSTALL_DIR/osdagbridge_wheels"
+if [ -d "$WHEEL_DIR" ]; then
+    echo "Installing bundled openseespy/opsvis wheels..."
+    if ! "$INSTALL_DIR/bin/python" -m pip install --no-index --no-deps --find-links "$WHEEL_DIR" \
+            --disable-pip-version-check --no-warn-script-location \
+            openseespy openseespylinux opsvis; then
+        echo "WARNING: Could not install bundled openseespy/opsvis wheels."
+        echo "Analysis will not work until you run: pip install openseespy opsvis"
+    fi
+    rm -rf "$WHEEL_DIR"
+fi
+
 echo "Creating application launcher..."
 
 mkdir -p "$HOME/.local/share/applications"
