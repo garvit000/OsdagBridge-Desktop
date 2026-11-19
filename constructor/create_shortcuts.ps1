@@ -1,5 +1,7 @@
 param(
-    [string]$InstallDir
+    [string]$InstallDir,
+    # Internal: used by the detached background run that fills in EstimatedSize.
+    [switch]$UpdateSizeOnly
 )
 
 $AppName = "OsdagBridge"
@@ -19,6 +21,39 @@ if ($isAdmin) {
 } else {
     $StartMenuDir = Join-Path $env:AppData "Microsoft\Windows\Start Menu\Programs\$AppName"
     $DesktopPath = [Environment]::GetFolderPath("Desktop")
+}
+
+# ---- Background mode: compute the real install size for "Installed apps" ----
+if ($UpdateSizeOnly) {
+    # Skip pkgs\: the package cache still exists while post_install runs and is
+    # deleted by the installer right afterwards, so it must not be counted.
+    $fso = New-Object -ComObject Scripting.FileSystemObject
+    $root = $fso.GetFolder($InstallDir)
+    $bytes = 0
+    foreach ($f in $root.Files) { $bytes += $f.Size }
+    foreach ($d in $root.SubFolders) {
+        if ($d.Name -ne "pkgs") { $bytes += $d.Size }
+    }
+    $realKB = [int][math]::Round($bytes / 1KB)
+
+    if ($isAdmin) {
+        $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+            [Microsoft.Win32.RegistryHive]::LocalMachine,
+            [Microsoft.Win32.RegistryView]::Registry64
+        )
+        $subKey = $baseKey.OpenSubKey("Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName", $true)
+        if ($subKey) {
+            $subKey.SetValue("EstimatedSize", $realKB, [Microsoft.Win32.RegistryValueKind]::DWord)
+            $subKey.Close()
+        }
+        $baseKey.Close()
+    } else {
+        $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
+        if (Test-Path $key) {
+            New-ItemProperty -Path $key -Name "EstimatedSize" -Value $realKB -PropertyType DWord -Force | Out-Null
+        }
+    }
+    exit 0
 }
 
 if (!(Test-Path $StartMenuDir)) {
@@ -45,8 +80,11 @@ $Shortcut.IconLocation = "$IconFile,0"
 $Shortcut.Save()
 
 # ---- Registry Entry for Add/Remove Programs ----
-$SizeBytes = (Get-ChildItem $InstallDir -Recurse -Force | Measure-Object -Property Length -Sum).Sum
-$SizeKB = [math]::Round($SizeBytes / 1KB)
+# EstimatedSize is only shown in "Installed apps". Walking the tens of thousands
+# of files in the environment (previously Get-ChildItem -Recurse) blocked the
+# installer for minutes, so write a placeholder now and let a hidden background
+# process replace it with the real size (see the end of this script).
+$SizeKB = 4500000  # ~4.5 GB placeholder
 
 if ($isAdmin) {
     $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
@@ -77,4 +115,16 @@ if ($isAdmin) {
     Set-ItemProperty -Path $UninstallKey -Name "InstallLocation" -Value $InstallDir
     Set-ItemProperty -Path $UninstallKey -Name "HelpLink" -Value "https://osdag.fossee.in/"
     New-ItemProperty -Path $UninstallKey -Name "EstimatedSize" -Value $SizeKB -PropertyType DWord -Force | Out-Null
+}
+
+# ---- Accurate EstimatedSize, computed without blocking the installer ----
+try {
+    Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+        -WindowStyle Hidden `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass",
+                        "-File", "`"$PSCommandPath`"",
+                        "-InstallDir", "`"$InstallDir`"",
+                        "-UpdateSizeOnly")
+} catch {
+    # Cosmetic only; keep the placeholder size.
 }
